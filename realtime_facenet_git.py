@@ -25,7 +25,7 @@ with tf.Graph().as_default():
     gpu_options = tf.GPUOptions(per_process_gpu_memory_fraction=0.6)
     sess = tf.Session(config=tf.ConfigProto(gpu_options=gpu_options, log_device_placement=False))
     with sess.as_default():
-        pnet, rnet, onet = detect_face.create_mtcnn(sess, './Path to det1.npy,..')
+        pnet, rnet, onet = detect_face.create_mtcnn(sess, '../facenet/src/align')  # './Path to det1.npy,..')
 
         minsize = 20  # minimum size of face
         threshold = [0.6, 0.7, 0.7]  # three steps's threshold
@@ -36,10 +36,16 @@ with tf.Graph().as_default():
         image_size = 182
         input_image_size = 160
 
-        HumanNames = ['Human_a','Human_b','Human_c','...','Human_h']    #train human name
+        HumanNames = []
+        paths = './Photo/'
+        for path in paths.split(':'):
+            path_exp = os.path.expanduser(path)
+            HumanNames = os.listdir(path_exp)
+            HumanNames.sort()
+        # HumanNames = ['Human_a','Human_b','Human_c','...','Human_h']    #train human name
 
         print('Loading feature extraction model')
-        modeldir = '/..Path to pre-trained model../20170512-110547/20170512-110547.pb'
+        modeldir = './20180402-114759/20180402-114759.pb'  # '/..Path to pre-trained model../20170512-110547/20170512-110547.pb'
         facenet.load_model(modeldir)
 
         images_placeholder = tf.get_default_graph().get_tensor_by_name("input:0")
@@ -47,7 +53,7 @@ with tf.Graph().as_default():
         phase_train_placeholder = tf.get_default_graph().get_tensor_by_name("phase_train:0")
         embedding_size = embeddings.get_shape()[1]
 
-        classifier_filename = '/..Path to classifier model../my_classifier.pkl'
+        classifier_filename = './classifier/my_classifier.pkl'  # '/..Path to classifier model../my_classifier.pkl'
         classifier_filename_exp = os.path.expanduser(classifier_filename)
         with open(classifier_filename_exp, 'rb') as infile:
             (model, class_names) = pickle.load(infile)
@@ -65,9 +71,9 @@ with tf.Graph().as_default():
         while True:
             ret, frame = video_capture.read()
 
-            frame = cv2.resize(frame, (0,0), fx=0.5, fy=0.5)    #resize frame (optional)
+            frame = cv2.resize(frame, (0, 0), fx=1.0, fy=1.0)  # fx=0.5, fy=0.5)    #resize frame (optional)
 
-            curTime = time.time()    # calc fps
+            curTime = time.time()  # calc fps
             timeF = frame_interval
 
             if (c % timeF == 0):
@@ -84,10 +90,10 @@ with tf.Graph().as_default():
                     det = bounding_boxes[:, 0:4]
                     img_size = np.asarray(frame.shape)[0:2]
 
-                    cropped = []
-                    scaled = []
-                    scaled_reshape = []
-                    bb = np.zeros((nrof_faces,4), dtype=np.int32)
+                    #cropped = []
+                    #scaled = []
+                    #scaled_reshape = []
+                    bb = np.zeros((nrof_faces, 4), dtype=np.int32)
 
                     for i in range(nrof_faces):
                         emb_array = np.zeros((1, embedding_size))
@@ -102,21 +108,21 @@ with tf.Graph().as_default():
                             print('face is inner of range!')
                             continue
 
-                        cropped.append(frame[bb[i][1]:bb[i][3], bb[i][0]:bb[i][2], :])
-                        cropped[0] = facenet.flip(cropped[0], False)
-                        scaled.append(misc.imresize(cropped[0], (image_size, image_size), interp='bilinear'))
-                        scaled[0] = cv2.resize(scaled[0], (input_image_size,input_image_size),
+                        cropped = frame[bb[i][1]:bb[i][3], bb[i][0]:bb[i][2], :]
+                        #cropped[0] = facenet.flip(cropped[0], False)
+                        scaled = misc.imresize(cropped, (image_size, image_size), interp='bilinear')
+                        scaled = cv2.resize(scaled, (input_image_size, input_image_size),
                                                interpolation=cv2.INTER_CUBIC)
-                        scaled[0] = facenet.prewhiten(scaled[0])
-                        scaled_reshape.append(scaled[0].reshape(-1,input_image_size,input_image_size,3))
-                        feed_dict = {images_placeholder: scaled_reshape[0], phase_train_placeholder: False}
+                        scaled = facenet.prewhiten(scaled)
+                        scaled_reshape = scaled.reshape(-1, input_image_size, input_image_size, 3)
+                        feed_dict = {images_placeholder: scaled_reshape, phase_train_placeholder: False}
                         emb_array[0, :] = sess.run(embeddings, feed_dict=feed_dict)
                         predictions = model.predict_proba(emb_array)
                         best_class_indices = np.argmax(predictions, axis=1)
                         best_class_probabilities = predictions[np.arange(len(best_class_indices)), best_class_indices]
-                        cv2.rectangle(frame, (bb[i][0], bb[i][1]), (bb[i][2], bb[i][3]), (0, 255, 0), 2)    #boxing face
+                        cv2.rectangle(frame, (bb[i][0], bb[i][1]), (bb[i][2], bb[i][3]), (0, 255, 0), 2)  # boxing face
 
-                        #plot result idx under box
+                        # plot result idx under box
                         text_x = bb[i][0]
                         text_y = bb[i][3] + 20
                         # print('result: ', best_class_indices[0])
@@ -137,7 +143,8 @@ with tf.Graph().as_default():
             cv2.putText(frame, str, (text_fps_x, text_fps_y),
                         cv2.FONT_HERSHEY_COMPLEX_SMALL, 1, (0, 0, 0), thickness=1, lineType=2)
             # c+=1
-            cv2.imshow('Video', frame)
+            frameS = cv2.resize(frame, (960, 640))
+            cv2.imshow('Video', frameS)
 
             if cv2.waitKey(1) & 0xFF == ord('q'):
                 break
